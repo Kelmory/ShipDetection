@@ -3,28 +3,23 @@ import cv2
 import math
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
-def normalize(array_obj: np.ndarray, padding=None) -> np.ndarray:
+def normalize(array_obj: np.ndarray, padding=None, resize=None) -> np.ndarray:
     new = []
     for sample in array_obj:
         if isinstance(padding, tuple):
             res = np.zeros(padding)
-            res[:sample.shape[0],:sample.shape[1], :] = sample
+            res[:sample.shape[0], :sample.shape[1], :] = sample
             sample = res
+        if isinstance(resize, tuple):
+            if len(resize) == 3:
+                resize = resize[:2]
+            sample = cv2.resize(sample, resize)
+        if len(sample.shape) < 3:
+            sample = np.reshape(sample, sample.shape + (1,))
         new.append(sample)
     return np.asarray(new)
-
-
-def visualize(x, y):
-    plt.subplot(1, 2, 1).axis('off')
-    x = x.reshape((768, 768))
-    plt.imshow(x)
-    plt.subplot(1, 2, 2).axis('off')
-    y = y.reshape((768, 768))
-    plt.imshow(y)
-    plt.show()
 
 
 class PathHelper:
@@ -54,6 +49,7 @@ class DataGenerator:
     _gen_mode = ('train', 'valid', 'test')
     _use_mode = 'test'
     _steps = 1000
+    _dropna = False
     _divide_k = 8
     _x_shape = (768,768,1)
     _y_shape = (768,768,1)
@@ -153,8 +149,6 @@ class BinDirDataGenerator(DataGenerator):
                          for img in pos[i * pos_per_batch: (i + 1) * pos_per_batch]]
                 x_neg = [np.array(cv2.imread(img, cv2.IMREAD_GRAYSCALE))
                          for img in neg[i * neg_per_batch: (i + 1) * neg_per_batch]]
-                x_pos = [np.reshape(img, img.shape + (1,)) for img in x_pos]
-                x_neg = [np.reshape(img, img.shape + (1,)) for img in x_neg]
             elif self._load_mode is 'memory':
                 x_pos = pos[i * pos_per_batch: (i + 1) * pos_per_batch]
                 x_neg = neg[i * neg_per_batch: (i + 1) * neg_per_batch]
@@ -214,7 +208,13 @@ class CsvDirGenerator(DataGenerator):
 
     def load_data(self):
         refer = pd.read_csv(self._csv_path)
-        self._refer = refer.sample(frac=1).reset_index(drop=True)[:2000]
+        if self._dropna:
+            refer = refer.dropna()
+        else:
+            na_set = refer.loc[refer['EncodedPixels'].isna()].sample(frac=1).reset_index(drop=True)[:int(self._steps / 2)]
+            pos_set = refer.dropna().sample(frac=1).reset_index(drop=True)[:int(self._steps / 2)]
+            refer = na_set.append(pos_set)
+        self._refer = refer.sample(frac=1).reset_index(drop=True)[:self._steps]
 
         if self._load_mode is 'memory':
             self._x_ = self._refer['ImageId'].apply(lambda img_name: cv2.imread(self._dir_path + '/' + img_name))
@@ -223,14 +223,14 @@ class CsvDirGenerator(DataGenerator):
             self._x_ = self._refer['ImageId'].apply(lambda img_name: self._dir_path + '/' + img_name)
             self._y_ = self._refer['EncodedPixels']
 
-        self._steps = len(self._x_) - math.ceil(len(self._x_) / self._divide_k)
+        self._steps = math.ceil(len(self._x_) / self._batch_size)
         self._data_loaded = True
 
-    def generate(self):
+    def generate(self, valid=False):
         if not self._data_loaded:
             raise Exception('Data unloaded, use `load_data` method before using `generate`.')
 
-        x_, y_ = self.divide()
+        x_, y_ = self.divide(valid)
 
         if not self._divided:
             raise Exception('Data not divided, use `divide` method.')
@@ -238,34 +238,35 @@ class CsvDirGenerator(DataGenerator):
         i = 0
         while True:
             if self._load_mode is 'disk':
-                x = x_[i * self._batch_size: (i + 1) * self._batch_size].apply(
+                x = x_[int(i * self._batch_size): int((i + 1) * self._batch_size)].apply(
                     lambda img: cv2.imread(img, cv2.IMREAD_GRAYSCALE))
-                y = y_[i * self._batch_size: (i + 1) * self._batch_size].apply(
+                y = y_[int(i * self._batch_size): int((i + 1) * self._batch_size)].apply(
                     lambda label: self.__mask_decode(label))
             elif self._load_mode is 'memory':
-                x = x_[i * self._batch_size: (i + 1) * self._batch_size]
-                y = y_[i * self._batch_size: (i + 1) * self._batch_size]
+                x = x_[int(i * self._batch_size): int((i + 1) * self._batch_size)]
+                y = y_[int(i * self._batch_size): int((i + 1) * self._batch_size)]
             else:
                 raise KeyError('Wrong generate mode, `disk` or `memory` expected, but %s found' % self._load_mode)
-            x = normalize(x)
-            x = x.reshape(x.shape + (1,))
-            y = normalize(y)
+            x = normalize(x, resize=self._x_shape)
+            y = normalize(y, resize=self._y_shape)
             x = x / 255.0
-            i = (i + 1) % self._steps
+            i = (i + 1) % math.ceil(len(x_) / self._batch_size)
             yield x, y
 
-    def divide(self):
+    def divide(self, valid=False):
         if self._use_mode not in self._gen_mode:
             raise KeyError('`mode` should be in  %s, but %s found.' % (self._gen_mode, self._use_mode))
         elif self._use_mode is 'test':
             self._divided = True
             return self._x_, self._y_
-        elif self._use_mode is 'train':
+        elif self._use_mode is 'train' and not valid:
             x_ = self._x_.drop(index=list(range(0, len(self._x_), self._divide_k)))
             y_ = self._y_.drop(index=list(range(0, len(self._y_), self._divide_k)))
-        else:
+        elif valid:
             x_ = self._x_[::self._divide_k]
             y_ = self._y_[::self._divide_k]
+        else:
+            raise KeyError('`mode` should be in  %s, but %s found.' % (self._gen_mode, self._use_mode))
         self._divided = True
         return x_, y_
 
@@ -280,8 +281,3 @@ class CsvDirGenerator(DataGenerator):
         mask = mask.reshape(self._y_shape).T.reshape(self._y_shape)
         return mask
 
-
-if __name__ == '__main__':
-    gen = CsvDirGenerator(None)
-    for x, y in gen.generate():
-        visualize(x, y)

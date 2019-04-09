@@ -1,8 +1,6 @@
 from ShipDetection.data_io import *
 from ShipDetection.net import *
 
-import multiprocessing
-
 
 class Config:
     config = {}
@@ -60,11 +58,8 @@ class Pipeline:
             raise KeyError('`mode` should be `train` or `predict`.')
         else:
             func = getattr(self.net, mode)
-            func(generator=self.generator.generate(), **kwargs)
+            func(generator=self.generator.generate(), valid_generator=self.generator.generate(valid=True), **kwargs)
 
 
 class CoreHolder:
     daemon = None
-
-    def __init__(self):
-        self.daemon = multiprocessing.process.active_children()

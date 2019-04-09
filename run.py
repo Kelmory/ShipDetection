@@ -2,8 +2,10 @@ from ShipDetection.core import Pipeline
 
 
 def run_fcn():
-    fcn_config_dict = {'_epoch': 20,
-                       '_batch_size': 1,
+    fcn_config_dict = {'_epoch': 50,
+                       '_batch_size': 8,
+                       '_steps': 10000,
+                       '_dropna': False,
                        '_lr': 3e-4,
                        '_model_path': 'E:/Data/ShipDetection/FCN/model.h5',
                        '_parent_path': 'E:/Data/ShipDetection/FCN',
@@ -12,8 +14,8 @@ def run_fcn():
                        '_load_mode': 'disk',
                        '_use_mode': 'train',
                        '_divide_k': 10,
-                       '_x_shape': (768, 768, 1),
-                       '_y_shape': (768, 768, 1)
+                       '_x_shape': (256, 256, 1),
+                       '_y_shape': (256, 256, 1)
                        }
     pipe = Pipeline('UNet', 'CsvDirGenerator', fcn_config_dict)
     pipe.work('train')
@@ -31,8 +33,8 @@ def run_fcn2():
                        '_use_mode': 'test',
                        '_steps': 20,
                        '_divide_k': 10,
-                       '_x_shape': (768, 768, 1),
-                       '_y_shape': (768, 768, 1)
+                       '_x_shape': (256, 256, 1),
+                       '_y_shape': (256, 256, 1)
                        }
     pipe = Pipeline('UNet', 'CsvDirGenerator', fcn_config_dict)
     pipe.work('train')
