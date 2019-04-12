@@ -26,8 +26,7 @@ class Config:
         if not isinstance(config_dict, dict):
             raise TypeError('`config_dict` should be a dict.')
         for option in config_dict:
-            if option in self.config.keys():
-                self.config[option] = config_dict[option]
+            self.config[option] = config_dict[option]
 
 
 class Pipeline:
@@ -54,11 +53,8 @@ class Pipeline:
             self.net = getattr(net_module, net)(self.config)
 
     def work(self, mode, **kwargs):
-        if mode not in ('train', 'predict'):
-            raise KeyError('`mode` should be `train` or `predict`.')
-        else:
-            func = getattr(self.net, mode)
-            func(generator=self.generator.generate(), valid_generator=self.generator.generate(valid=True), **kwargs)
+        func = getattr(self.net, mode)
+        func(generator=self.generator.generate(), valid_generator=self.generator.generate(valid=True), **kwargs)
 
 
 class CoreHolder:

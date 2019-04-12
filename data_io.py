@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 
-def normalize(array_obj: np.ndarray, padding=None, resize=None) -> np.ndarray:
+def normalize(array_obj: np.ndarray, padding=None, resize=None, reverse=False) -> np.ndarray:
     new = []
     for sample in array_obj:
         if isinstance(padding, tuple):
@@ -18,6 +18,8 @@ def normalize(array_obj: np.ndarray, padding=None, resize=None) -> np.ndarray:
             sample = cv2.resize(sample, resize)
         if len(sample.shape) < 3:
             sample = np.reshape(sample, sample.shape + (1,))
+        if reverse:
+            sample = np.ones_like(sample) - sample
         new.append(sample)
     return np.asarray(new)
 
@@ -212,7 +214,7 @@ class CsvDirGenerator(DataGenerator):
             refer = refer.dropna()
         else:
             na_set = refer.loc[refer['EncodedPixels'].isna()].sample(frac=1).reset_index(drop=True)[:int(self._steps / 2)]
-            pos_set = refer.dropna().sample(frac=1).reset_index(drop=True)[:int(self._steps / 2)]
+            pos_set = refer.dropna().sample(frac=1).reset_index(drop=True)[:self._steps - int(self._steps / 2)]
             refer = na_set.append(pos_set)
         self._refer = refer.sample(frac=1).reset_index(drop=True)[:self._steps]
 
