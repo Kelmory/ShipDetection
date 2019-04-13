@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+from keras.models import load_model
 from ShipDetection.net import *
 from ShipDetection.data_io import CsvDirGenerator
 import matplotlib.pyplot as plt
@@ -43,7 +44,7 @@ def validate_loss():
 
 
 def visualize_predict(start=0, n=20):
-    net = UNet(None).get_model()
+    net = DenoiseNet(None).get_model()
     net.summary()
     try:
         net.load_weights('E:/Data/ShipDetection/FCN/model.h5')
@@ -65,9 +66,16 @@ def visualize_predict(start=0, n=20):
         plt.imshow(x)
         plt.subplot(5, n * 0.4, 2 * i + 2).axis('off')
         y = y.reshape((768, 768))
-        y = cv2.GaussianBlur(y, (3, 3), 0.1)
+        y = np.asarray(y * 255, dtype=np.uint8)
+        y = cv2.blur(y, (3, 3))
+        y = cv2.equalizeHist(y)
         plt.imshow(y)
     plt.show()
+
+
+def migrate_model(model_path, model_name):
+    model_path = 'E:/Data/ShipDetection/FCN' if model_path is None else model_path
+    model_name = model_path + '/' + model_name
 
 
 if __name__ == '__main__':

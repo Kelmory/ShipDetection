@@ -55,7 +55,7 @@ class Net:
             raise KeyError('Batch generator key `generator` not given.')
 
         if 'callbacks' not in kwargs:
-            callbacks = [EarlyStopping(patience=20, monitor='val_loss'),
+            callbacks = [EarlyStopping(patience=5, monitor='val_loss'),
                          ModelCheckpoint(self._model_path, save_best_only=True)]
         else:
             callbacks = kwargs['callbacks']
@@ -81,7 +81,7 @@ class Net:
             raise KeyError('Batch generator key `generator` not given.')
 
         if not self._model_exist:
-            raise AttributeError('[Info]Model weight does not exist, cannot predict.')
+            raise ValueError('Model weight does not exist, cannot predict.')
 
         self._net.load_weights(self._model_path)
         return self._net.predict_generator(generator=kwargs['generator'], steps_per_epoch=self._steps)
@@ -211,8 +211,8 @@ class DenoiseNet(Net):
         def down_sample_block(input_, filters=16, kernel_size=3):
             input_ = BatchNormalization()(input_)
             conv1 = Conv2D(filters, kernel_size, padding='same', activation='relu')(input_)
-            conv2 = Conv2D(filters, kernel_size, dilation_rate=(2, 2), padding='same', activation='relu')(input_)
-            conv3 = Conv2D(filters, kernel_size, dilation_rate=(3, 3), padding='same', activation='relu')(input_)
+            conv2 = SeparableConv2D(filters, kernel_size, dilation_rate=(2, 1), padding='same', activation='relu')(input_)
+            conv3 = SeparableConv2D(filters, kernel_size, dilation_rate=(1, 2), padding='same', activation='relu')(input_)
             concat = Concatenate()([conv1, conv2, conv3])
             concat = Conv2D(filters, kernel_size, padding='same', activation='hard_sigmoid')(concat)
             return MaxPooling2D()(concat)
@@ -220,26 +220,31 @@ class DenoiseNet(Net):
         def up_sample_block(input_, filters=16, kernel_size=3):
             input_ = BatchNormalization()(input_)
             conv1 = Conv2D(filters, kernel_size, padding='same', activation='relu')(input_)
-            conv2 = Conv2D(filters, kernel_size, padding='same', activation='reluu')(conv1)
-            concat = Conv2D(filters, kernel_size, padding='same', activation='hard_sigmoid')(conv2)
-            return UpSampling2D()(concat)
+            conv2 = Conv2D(filters, kernel_size, padding='same', activation='hard_sigmoid')(conv1)
+            return UpSampling2D()(conv2)
 
         net_in = Input(self._x_shape)
         db1 = down_sample_block(net_in)
-        db2 = down_sample_block(db1)
+        db2 = down_sample_block(db1, 32)
         db3 = down_sample_block(db2, 32)
         db4 = down_sample_block(db3, 64)
-        db5 = down_sample_block(db4, 128)
+        db5 = down_sample_block(db4, 64)
+        db6 = down_sample_block(db5, 128)
+        db7 = down_sample_block(db6, 128)
 
-        ub5 = up_sample_block(db5, 128)
+        ub7 = up_sample_block(db7, 128)
+        concat = Concatenate()([ub7, db6])
+        ub6 = up_sample_block(concat, 128)
+        concat = Concatenate()([ub6, db5])
+        ub5 = up_sample_block(concat, 64)
         concat = Concatenate()([ub5, db4])
         ub4 = up_sample_block(concat, 64)
         concat = Concatenate()([ub4, db3])
-        ub3 = up_sample_block(concat, 64)
+        ub3 = up_sample_block(concat, 32)
         concat = Concatenate()([ub3, db2])
         ub2 = up_sample_block(concat, 32)
         concat = Concatenate()([ub2, db1])
-        ub1 = up_sample_block(concat, 32)
+        ub1 = up_sample_block(concat)
 
         net_out = Conv2D(1, 1, activation='hard_sigmoid')(ub1)
         return Model(inputs=[net_in], outputs=[net_out])
