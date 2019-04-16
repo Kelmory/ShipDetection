@@ -15,7 +15,8 @@ def normalize(array_obj: np.ndarray, padding=None, resize=None, reverse=False) -
         if isinstance(resize, tuple):
             if len(resize) == 3:
                 resize = resize[:2]
-            sample = cv2.resize(sample, resize)
+            if all(resize):
+                sample = cv2.resize(sample, resize)
         if len(sample.shape) < 3:
             sample = np.reshape(sample, sample.shape + (1,))
         if reverse:
@@ -50,11 +51,13 @@ class DataGenerator:
     _divided = False
     _gen_mode = ('train', 'valid', 'test')
     _use_mode = 'test'
-    _steps = 1000
+    _steps = 10
     _dropna = False
     _divide_k = 8
     _x_shape = (768,768,1)
     _y_shape = (768,768,1)
+    _augmentation = False
+    _refer: pd.DataFrame = None
 
     def __init__(self, config=None):
         if config:
@@ -72,7 +75,7 @@ class DataGenerator:
     def load_data(self):
         pass
 
-    def divide(self):
+    def divide(self) -> (pd.DataFrame, pd.DataFrame):
         pass
 
     def generate(self):
@@ -88,10 +91,9 @@ class DataGenerator:
 
 
 class BinDirDataGenerator(DataGenerator):
-    _pos_path = ''
-    _neg_path = ''
-    _pos = []
-    _neg = []
+    _parent_path = 'E:/Data/ShipDetection/CNN'
+    _pos_path = 'ship'
+    _neg_path = 'negative'
 
     def __init__(self, config):
         super().__init__(config)
@@ -116,79 +118,80 @@ class BinDirDataGenerator(DataGenerator):
         pos_files = os.listdir(self._pos_path)
         neg_files = os.listdir(self._neg_path)
 
+        pos = {self._pos_path + '/' + name: 1 for name in pos_files}
+        neg = {self._neg_path + '/' + name: 0 for name in neg_files}
+
+        pos = pd.DataFrame.from_dict(pos, orient='index')
+        neg = pd.DataFrame.from_dict(neg, orient='index')
+
+        refer = pos.append(neg).reset_index()
+        refer.columns = ['ImageId', 'IsShip']
+        self._refer = refer.sample(frac=1).reset_index(drop=True)[:self._steps]
+
         if self._load_mode is 'disk':
-            self._pos = [(self._pos_path + '/' + img) for img in pos_files]
-            self._neg = [(self._neg_path + '/' + img) for img in neg_files]
+            self._refer['x'] = self._refer['ImageId']
+            self._refer['y'] = self._refer['IsShip']
         elif self._load_mode is 'memory':
-            self._pos = [cv2.imread(self._pos_path + '/' + img, cv2.IMREAD_GRAYSCALE) for img in pos_files]
-            self._neg = [cv2.imread(self._neg_path + '/' + img, cv2.IMREAD_GRAYSCALE) for img in neg_files]
-            self._pos = [np.reshape(img, img.shape + (1,)) / 255.0 for img in self._pos]
-            self._neg = [np.reshape(img, img.shape + (1,)) / 255.0 for img in self._neg]
+            self._refer['ImageId'] = self._refer['ImageId'].apply(lambda img: cv2.imread(img, cv2.IMREAD_GRAYSCALE))
+            self._refer['ImageId'] = self._refer['ImageId'].apply(lambda img: np.reshape(img, img.shape + (1,)) / 255.0)
+            self._refer['x'] = self._refer['ImageId']
+            self._refer['y'] = self._refer['IsShip']
         else:
             raise KeyError('read mode should be `disk` or `memory`, but %s found.' % self._load_mode)
 
-        self._steps = (len(self._pos) + len(self._neg)) - math.ceil((len(self._pos) + len(self._neg)) / self._divide_k)
-
+        self._steps = math.ceil(len(self._refer['x']) / self._batch_size)
         self._data_loaded = True
 
-    def generate(self):
+    def generate(self, valid=False):
         if not self._data_loaded:
             raise Exception('Data unloaded, use `load_data` method before using `generate`.')
 
-        pos, neg = self.divide()
-        total = len(pos) + len(neg)
+        x_, y_ = self.divide(valid)
 
         if not self._divided:
             raise Exception('Data not divided, use `divide` method.')
 
-        pos_per_batch = round(len(pos) / total * self._batch_size)
-        neg_per_batch = round(len(neg) / total * self._batch_size)
-
         i = 0
         while True:
             if self._load_mode is 'disk':
-                x_pos = [np.array(cv2.imread(img, cv2.IMREAD_GRAYSCALE))
-                         for img in pos[i * pos_per_batch: (i + 1) * pos_per_batch]]
-                x_neg = [np.array(cv2.imread(img, cv2.IMREAD_GRAYSCALE))
-                         for img in neg[i * neg_per_batch: (i + 1) * neg_per_batch]]
+                x = x_[int(i * self._batch_size): int((i + 1) * self._batch_size)].apply(
+                    lambda img: cv2.imread(img, cv2.IMREAD_GRAYSCALE))
+                y = y_[int(i * self._batch_size): int((i + 1) * self._batch_size)]
             elif self._load_mode is 'memory':
-                x_pos = pos[i * pos_per_batch: (i + 1) * pos_per_batch]
-                x_neg = neg[i * neg_per_batch: (i + 1) * neg_per_batch]
+                x = x_[int(i * self._batch_size): int((i + 1) * self._batch_size)]
+                y = y_[int(i * self._batch_size): int((i + 1) * self._batch_size)]
             else:
                 raise KeyError('Wrong generate mode, `disk` or `memory` expected, but %s found' % self._load_mode)
-            x = np.array((x_pos + x_neg))
-            x = normalize(x, padding=(200, 200, 1))
+            x = normalize(x, resize=self._x_shape)
+            y = np.asarray(y, dtype=np.float32)
             x = x / 255.0
-            y = np.array([1.0] * pos_per_batch + [0.0] * neg_per_batch)
-            i = (i + 1) % self._steps
+            i = (i + 1) % math.ceil(len(x_) / self._batch_size)
+            if i == 0:
+                x_, y_ = self.divide(valid)
             yield x, y
 
-    def divide(self):
+    def divide(self, valid=False):
+        self._refer = self._refer.sample(frac=1).reset_index(drop=True)
         if self._use_mode not in self._gen_mode:
             raise KeyError('`mode` should be in  %s, but %s found.' % (self._gen_mode, self._use_mode))
         elif self._use_mode is 'test':
             self._divided = True
-            return self._pos, self._neg
-        elif self._use_mode is 'train':
-            pos = [i if self._pos.index(i) % self._divide_k != 0 else None for i in self._pos]
-            neg = [i if self._neg.index(i) % self._divide_k != 0 else None for i in self._neg]
+            return self._refer['x'], self._refer['y']
+        elif self._use_mode is 'train' and not valid:
+            x_ = self._refer['x'].drop(index=list(range(0, len(self._refer['x']), self._divide_k)))
+            y_ = self._refer['y'].drop(index=list(range(0, len(self._refer['y']), self._divide_k)))
+        elif valid:
+            x_ = self._refer['x'][::self._divide_k]
+            y_ = self._refer['y'][::self._divide_k]
         else:
-            pos = [i if self._pos.index(i) % self._divide_k == 0 else None for i in self._pos]
-            neg = [i if self._neg.index(i) % self._divide_k == 0 else None for i in self._neg]
-        while None in pos:
-            pos.remove(None)
-        while None in neg:
-            neg.remove(None)
+            raise KeyError('`mode` should be in  %s, but %s found.' % (self._gen_mode, self._use_mode))
         self._divided = True
-        return pos, neg
+        return x_, y_
 
 
 class CsvDirGenerator(DataGenerator):
     _csv_path = "train2.csv"
     _dir_path = "train"
-    _refer = None
-    _x_ = None
-    _y_ = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -219,13 +222,13 @@ class CsvDirGenerator(DataGenerator):
         self._refer = refer.sample(frac=1).reset_index(drop=True)[:self._steps]
 
         if self._load_mode is 'memory':
-            self._x_ = self._refer['ImageId'].apply(lambda img_name: cv2.imread(self._dir_path + '/' + img_name))
-            self._y_ = self._refer['EncodedPixels'].apply(lambda pixels: self.__mask_decode(pixels))
+            self._refer['x'] = self._refer['ImageId'].apply(lambda img_name: cv2.imread(self._dir_path + '/' + img_name))
+            self._refer['y'] = self._refer['EncodedPixels'].apply(lambda pixels: self.__mask_decode(pixels))
         elif self._load_mode is 'disk':
-            self._x_ = self._refer['ImageId'].apply(lambda img_name: self._dir_path + '/' + img_name)
-            self._y_ = self._refer['EncodedPixels']
+            self._refer['x'] = self._refer['ImageId'].apply(lambda img_name: self._dir_path + '/' + img_name)
+            self._refer['y'] = self._refer['EncodedPixels']
 
-        self._steps = math.ceil(len(self._x_) / self._batch_size)
+        self._steps = math.ceil(len(self._refer['x']) / self._batch_size)
         self._data_loaded = True
 
     def generate(self, valid=False):
@@ -252,21 +255,27 @@ class CsvDirGenerator(DataGenerator):
             x = normalize(x, resize=self._x_shape)
             y = normalize(y, resize=self._y_shape)
             x = x / 255.0
+            if self._augmentation:
+                x = np.concatenate((x, x * 0.5), axis=0)
+                y = np.concatenate((y.copy(), y.copy()), axis=0)
             i = (i + 1) % math.ceil(len(x_) / self._batch_size)
+            if i == 0:
+                x_, y_ = self.divide(valid)
             yield x, y
 
     def divide(self, valid=False):
+        self._refer = self._refer.sample(frac=1).reset_index(drop=True)
         if self._use_mode not in self._gen_mode:
             raise KeyError('`mode` should be in  %s, but %s found.' % (self._gen_mode, self._use_mode))
         elif self._use_mode is 'test':
             self._divided = True
-            return self._x_, self._y_
+            return self._refer['x'], self._refer['y']
         elif self._use_mode is 'train' and not valid:
-            x_ = self._x_.drop(index=list(range(0, len(self._x_), self._divide_k)))
-            y_ = self._y_.drop(index=list(range(0, len(self._y_), self._divide_k)))
+            x_ = self._refer['x'].drop(index=list(range(0, len(self._refer['x']), self._divide_k)))
+            y_ = self._refer['y'].drop(index=list(range(0, len(self._refer['y']), self._divide_k)))
         elif valid:
-            x_ = self._x_[::self._divide_k]
-            y_ = self._y_[::self._divide_k]
+            x_ = self._refer['x'][::self._divide_k]
+            y_ = self._refer['y'][::self._divide_k]
         else:
             raise KeyError('`mode` should be in  %s, but %s found.' % (self._gen_mode, self._use_mode))
         self._divided = True

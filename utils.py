@@ -19,7 +19,7 @@ def visualize_generator():
         plt.show()
 
 
-def validate_loss():
+def validate_loss(show=False):
     gen = CsvDirGenerator(None).generate()
 
     def focal_loss(y_true, y_pred, alpha=0.25, gamma=2):
@@ -28,18 +28,25 @@ def validate_loss():
         pt_0 = np.where(np.equal(y_true, 0), y_pred, np.zeros_like(y_pred))
         return -np.sum(alpha * np.power(1. - pt_1, gamma) * np.log(pt_1)) - \
                np.sum((1 - alpha) * np.power(pt_0, gamma) * np.log(1. - pt_0))
+
     for i, data in enumerate(gen):
         y = data[1]
-        print('self: %f' % focal_loss(y, y))
-        print('zero: %f' % focal_loss(y, np.zeros_like(y)))
-        print('ones: %f' % focal_loss(y, np.ones_like(y)))
-        y_ = y[0, :, :, 0] * 255
-        edge = cv2.Canny(y_, 100, 300)
-        edge = edge / 255.0
-        plt.subplot(1, 1, 1).axis('off')
-        plt.imshow(edge)
-        plt.show()
-        if i == 10:
+        print('For img %d' % i)
+        print('\t self: %f' % focal_loss(y, y))
+        print('\t zero: %f' % focal_loss(y, np.zeros_like(y)))
+        print('\t ones: %f' % focal_loss(y, np.ones_like(y)))
+        print('\t rand: %f' % focal_loss(y, np.full_like(y, 0.5)))
+        if show:
+            x_ = data[0][0, :, :, 0] * 255
+            y_ = y[0, :, :, 0] * 255
+            edge = cv2.Canny(y_, 100, 300)
+            edge = edge / 255.0
+            plt.subplot(1, 1, 1).axis('off')
+            plt.imshow(x_)
+            plt.imshow(y_, alpha=0.4)
+            plt.imshow(edge, alpha=0.8)
+            plt.show()
+        if i == 5:
             break
 
 
@@ -66,10 +73,9 @@ def visualize_predict(start=0, n=20):
         plt.imshow(x)
         plt.subplot(5, n * 0.4, 2 * i + 2).axis('off')
         y = y.reshape((768, 768))
-        y = np.asarray(y * 255, dtype=np.uint8)
-        y = cv2.blur(y, (3, 3))
-        y = cv2.equalizeHist(y)
+        y = cv2.equalizeHist(np.uint8(y * 255))
         plt.imshow(y)
+        # plt.hist(y.ravel(), 20)
     plt.show()
 
 
@@ -79,4 +85,6 @@ def migrate_model(model_path, model_name):
 
 
 if __name__ == '__main__':
+    # validate_loss()
+    # visualize_generator()
     visualize_predict()

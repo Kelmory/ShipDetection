@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 
+
 def process_fcn_label_merge():
     path_ = 'E:/Data/ShipDetection/FCN/train.csv'
     masks = pd.read_csv(path_)
