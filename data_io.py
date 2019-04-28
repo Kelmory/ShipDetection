@@ -166,8 +166,6 @@ class BinDirDataGenerator(DataGenerator):
             y = np.asarray(y, dtype=np.float32)
             x = x / 255.0
             i = (i + 1) % math.ceil(len(x_) / self._batch_size)
-            if i == 0:
-                x_, y_ = self.divide(valid)
             yield x, y
 
     def divide(self, valid=False):
@@ -256,11 +254,14 @@ class CsvDirGenerator(DataGenerator):
             y = normalize(y, resize=self._y_shape)
             x = x / 255.0
             if self._augmentation:
-                x = np.concatenate((x, x * 0.5), axis=0)
-                y = np.concatenate((y.copy(), y.copy()), axis=0)
+                x = np.concatenate((x, x * np.random.random() * 1.5), axis=0)
+                y = np.concatenate((y, y.copy()), axis=0)
             i = (i + 1) % math.ceil(len(x_) / self._batch_size)
             if i == 0:
-                x_, y_ = self.divide(valid)
+                refer = pd.DataFrame()
+                refer['x'], refer['y'] = x_, y_
+                refer = refer.sample(frac=1).reset_index(drop=True)
+                x_, y_ = refer['x'], refer['y']
             yield x, y
 
     def divide(self, valid=False):

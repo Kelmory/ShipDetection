@@ -1,6 +1,6 @@
-from keras.models import Model
+from keras.models import Model, Sequential
 from keras.layers import Input
-from keras.layers import Conv2D, MaxPooling2D, UpSampling2D
+from keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Conv2DTranspose
 from keras.layers import SeparableConv2D, BatchNormalization
 from keras.layers import Concatenate
 from keras.layers import GlobalAveragePooling2D, Dense
@@ -10,6 +10,7 @@ from keras.optimizers import *
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from ShipDetection.data_io import PathHelper
 from ShipDetection.loss import *
+from keras.models import load_model
 
 
 class Net:
@@ -56,7 +57,7 @@ class Net:
             raise KeyError('Batch generator key `generator` not given.')
 
         if 'callbacks' not in kwargs:
-            callbacks = [EarlyStopping(patience=50, monitor='val_loss'),
+            callbacks = [EarlyStopping(patience=1000, monitor='val_loss', verbose=2),
                          ModelCheckpoint(self._model_path, save_best_only=True)]
         else:
             callbacks = kwargs['callbacks']
@@ -65,7 +66,7 @@ class Net:
             print('[Info]Model weight exists, try loading.')
             try:
                 self._net.load_weights(self._model_path, by_name=True)
-            except ValueError:
+            except (ValueError, OSError):
                 print('[Info]Model structure does not match, forming new model.')
 
         valid_steps = int(self._steps / self._divide_k)
@@ -116,30 +117,30 @@ class UNet(Net):
         fcn_in = Input(shape=self._x_shape)
 
         # convolution
-        gn1 = GaussianNoise(0.1)(fcn_in)
+        gn1 = GaussianNoise(1.0)(fcn_in)
         bn1 = BatchNormalization()(gn1)
         conv11 = Conv2D(64, 3, padding='same', activation='relu')(bn1)
         conv12 = Conv2D(64, 3, padding='same', activation='relu')(conv11)
         conv13 = MaxPooling2D()(conv12)
 
         bn2 = BatchNormalization()(conv13)
-        conv21 = SeparableConv2D(128, 3, padding='same', activation='relu')(bn2)
-        conv22 = SeparableConv2D(128, 3, padding='same', activation='relu')(conv21)
+        conv21 = SeparableConv2D(64, 3, padding='same', activation='relu')(bn2)
+        conv22 = SeparableConv2D(64, 3, padding='same', activation='relu')(conv21)
         conv23 = MaxPooling2D()(conv22)
 
         bn3 = BatchNormalization()(conv23)
-        conv31 = SeparableConv2D(256, 3, padding='same', activation='relu')(bn3)
-        conv32 = SeparableConv2D(256, 3, padding='same', activation='relu')(conv31)
+        conv31 = SeparableConv2D(128, 3, padding='same', activation='relu')(bn3)
+        conv32 = SeparableConv2D(128, 3, padding='same', activation='relu')(conv31)
         conv33 = MaxPooling2D()(conv32)
 
         bn4 = BatchNormalization()(conv33)
-        conv41 = SeparableConv2D(512, 3, padding='same', activation='relu')(bn4)
-        conv42 = SeparableConv2D(512, 3, padding='same', activation='relu')(conv41)
+        conv41 = SeparableConv2D(256, 3, padding='same', activation='relu')(bn4)
+        conv42 = SeparableConv2D(256, 3, padding='same', activation='relu')(conv41)
         conv43 = MaxPooling2D()(conv42)
 
         bn5 = BatchNormalization()(conv43)
-        conv51 = SeparableConv2D(1024, 3, padding='same', activation='relu')(bn5)
-        conv52 = SeparableConv2D(1024, 3, padding='same', activation='relu')(conv51)
+        conv51 = SeparableConv2D(256, 3, padding='same', activation='relu')(bn5)
+        conv52 = SeparableConv2D(256, 3, padding='same', activation='relu')(conv51)
 
         # deconvolution
         deconv51 = SeparableConv2D(128, 3, padding='same', activation='relu')(conv52)
@@ -147,17 +148,17 @@ class UNet(Net):
         deconv53 = UpSampling2D()(deconv52)
 
         concat4 = Concatenate()([deconv53, conv42])
-        deconv41 = SeparableConv2D(256, 3, padding='same', activation='relu')(concat4)
+        deconv41 = SeparableConv2D(128, 3, padding='same', activation='relu')(concat4)
         deconv42 = SeparableConv2D(128, 3, padding='same', activation='relu')(deconv41)
         deconv43 = UpSampling2D()(deconv42)
 
         concat3 = Concatenate()([deconv43, conv32])
-        deconv31 = SeparableConv2D(256, 3, padding='same', activation='relu')(concat3)
+        deconv31 = SeparableConv2D(128, 3, padding='same', activation='relu')(concat3)
         deconv32 = SeparableConv2D(128, 3, padding='same', activation='relu')(deconv31)
         deconv33 = UpSampling2D()(deconv32)
 
         concat2 = Concatenate()([deconv33, conv22])
-        deconv21 = SeparableConv2D(128, 3, padding='same', activation='relu')(concat2)
+        deconv21 = SeparableConv2D(64, 3, padding='same', activation='relu')(concat2)
         deconv22 = SeparableConv2D(64, 3, padding='same', activation='relu')(deconv21)
         deconv23 = UpSampling2D()(deconv22)
 
@@ -165,12 +166,13 @@ class UNet(Net):
         deconv11 = Conv2D(64, 3, padding='same', activation='relu')(concat1)
         deconv12 = Conv2D(32, 3, padding='same', activation='relu')(deconv11)
 
-        fcn_out = Conv2D(1, 1, activation='sigmoid')(deconv12)
+        channel_out = Conv2D(8, 1, activation='sigmoid')(deconv12)
+        fcn_out = Conv2D(1, 1, activation='sigmoid')(channel_out)
         return Model(inputs=[fcn_in], outputs=[fcn_out])
 
     def compile(self):
-        optimizer = Adadelta(lr=self._lr)
-        self._net.compile(optimizer=optimizer, loss=[focal_loss_fixed], metrics=['binary_accuracy'])
+        optimizer = Adam(lr=self._lr)
+        self._net.compile(optimizer=optimizer, loss=[focal_loss(alpha=0.75, gamma=0.5)], metrics=['binary_accuracy', true_positive_rate, IoU])
 
 
 class ConvNN(Net):
@@ -225,56 +227,44 @@ class DenoiseNet(Net):
             conv1 = SeparableConv2D(filters, kernel_size, padding='same')(conv1)
             conv1 = LeakyReLU()(conv1)
 
-            conv2 = SeparableConv2D(filters, kernel_size, dilation_rate=(2, 1), padding='same')(input_)
+            conv2 = SeparableConv2D(filters, kernel_size, padding='same')(input_)
             conv2 = LeakyReLU()(conv2)
 
-            conv3 = SeparableConv2D(filters, kernel_size, dilation_rate=(1, 2), padding='same')(input_)
-            conv3 = LeakyReLU()(conv3)
-
-            conv4 = SeparableConv2D(filters, kernel_size, padding='same')(input_)
-            conv4 = LeakyReLU()(conv4)
-
-            concat = Concatenate()([conv1, conv2, conv3, conv4])
-            concat = Conv2D(filters * 4, kernel_size, padding='same', activation='relu')(concat)
-            concat = Conv2D(filters * 2, kernel_size, padding='same', activation='hard_sigmoid')(concat)
+            concat = Concatenate()([conv1, conv2])
+            concat = Conv2D(filters * 2, kernel_size, padding='same', activation='relu')(concat)
+            concat = Conv2D(filters, kernel_size, padding='same', activation='hard_sigmoid')(concat)
 
             return MaxPooling2D()(concat)
 
         def up_sample_block(input_, filters=32, kernel_size=3):
             # input_ = BatchNormalization()(input_)
 
-            conv1 = SeparableConv2D(filters, kernel_size, padding='same')(input_)
+            conv1 = Conv2DTranspose(filters, kernel_size, padding='same')(input_)
             conv1 = LeakyReLU()(conv1)
 
-            conv2 = SeparableConv2D(filters, kernel_size, padding='same')(conv1)
-            conv2 = LeakyReLU()(conv2)
-
-            conv3 = Conv2D(filters, kernel_size, padding='same', activation='hard_sigmoid')(conv2)
+            conv3 = Conv2DTranspose(filters, kernel_size, padding='same', activation='hard_sigmoid')(conv1)
 
             return UpSampling2D()(conv3)
 
         net_in = Input(self._x_shape)
-        db1 = down_sample_block(net_in)
-        db2 = down_sample_block(db1)
-        db3 = down_sample_block(db2, 64)
+        db1 = down_sample_block(net_in, 8)
+        db2 = down_sample_block(db1, 16)
+        db3 = down_sample_block(db2, 32)
         db4 = down_sample_block(db3, 64)
         db5 = down_sample_block(db4, 128)
         db6 = down_sample_block(db5, 128)
-        db7 = down_sample_block(db6, 256)
 
-        ub7 = up_sample_block(db7, 256)
-        concat = Concatenate()([ub7, db6])
-        ub6 = up_sample_block(concat, 128)
+        ub6 = up_sample_block(db6, 128)
         concat = Concatenate()([ub6, db5])
         ub5 = up_sample_block(concat, 128)
         concat = Concatenate()([ub5, db4])
         ub4 = up_sample_block(concat, 64)
         concat = Concatenate()([ub4, db3])
-        ub3 = up_sample_block(concat, 64)
+        ub3 = up_sample_block(concat, 32)
         concat = Concatenate()([ub3, db2])
-        ub2 = up_sample_block(concat)
+        ub2 = up_sample_block(concat, 16)
         concat = Concatenate()([ub2, db1])
-        ub1 = up_sample_block(concat)
+        ub1 = up_sample_block(concat, 8)
 
         class_out = Conv2D(2, 1, activation='relu')(ub1)
         net_out = Conv2D(1, 1, activation='hard_sigmoid')(class_out)
@@ -282,5 +272,36 @@ class DenoiseNet(Net):
 
     def compile(self):
         optimizer = Adam(self._lr)
-        self._net.compile(optimizer, loss=[focal_loss_fixed],
+        self._net.compile(optimizer, loss=[focal_loss()],
                           metrics=[true_negative_rate, true_positive_rate])
+
+
+class TransferUNet(Net):
+    def _build(self):
+        sub = load_model('E:/Data/ShipDetection/FCN/UNet_768_epoch20.h5', compile=False)
+        sub.trainable = False
+
+        net_in = Input(self._x_shape)
+        prev = Conv2D(64, 3, padding='same', activation='relu')(net_in)
+        fixed = sub(net_in)
+        post = Conv2D(64, 3, padding='same', activation='relu')(fixed)
+        concat = Concatenate()([prev, post])
+        conv1 = Conv2D(64, 3, padding='same', activation='relu')(concat)
+        conv2 = Conv2D(64, 1, activation='relu')(conv1)
+        net_out = Conv2D(1, 1, activation='hard_sigmoid')(conv2)
+
+        return Model(inputs=[net_in], outputs=[net_out])
+
+    def summary(self, **kwargs):
+        self._net.summary()
+
+    def compile(self):
+        optimizer = Adam(self._lr)
+        self._net.compile(optimizer, loss=[focal_loss()],
+                          metrics=[true_negative_rate, true_positive_rate])
+
+
+class LoadNet(Net):
+    def _build(self) -> Model:
+        return load_model(self._model_path, compile=False)
+

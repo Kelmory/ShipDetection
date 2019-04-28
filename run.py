@@ -2,9 +2,9 @@ from ShipDetection.core import Pipeline
 
 
 def run_fcn():
-    fcn_config_dict = {'_epoch': 200,
-                       '_batch_size': 8,
-                       '_steps': 2000,
+    fcn_config_dict = {'_epoch': 1,
+                       '_batch_size': 1,
+                       '_steps': 800,
                        '_dropna': True,
                        '_load_model': True,
                        '_lr': 1e-2,
@@ -15,12 +15,12 @@ def run_fcn():
                        '_load_mode': 'disk',
                        '_use_mode': 'train',
                        '_divide_k': 5,
-                       '_x_shape': (384, 384, 1),
-                       '_y_shape': (384, 384, 1),
+                       '_x_shape': (768, 768, 1),
+                       '_y_shape': (768, 768, 1),
                        '_trainable': (None, None),
                        '_augmentation': False,
                        }
-    pipe = Pipeline('DenoiseNet', 'CsvDirGenerator', fcn_config_dict)
+    pipe = Pipeline('UNet', 'CsvDirGenerator', fcn_config_dict)
     pipe.work('train')
 
 
@@ -63,5 +63,5 @@ def run_cnn():
 
 
 if __name__ == '__main__':
-    # run_fcn()
-    run_cnn()
+    run_fcn()
+    # run_cnn()

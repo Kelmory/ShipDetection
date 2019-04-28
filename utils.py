@@ -1,10 +1,12 @@
 import os
 import cv2
+import math
 import numpy as np
 from keras.models import load_model
 from ShipDetection.net import *
 from ShipDetection.data_io import CsvDirGenerator
 import matplotlib.pyplot as plt
+import skimage.measure as measure
 
 
 def visualize_generator():
@@ -50,41 +52,63 @@ def validate_loss(show=False):
             break
 
 
-def visualize_predict(start=0, n=20):
-    net = DenoiseNet(None).get_model()
-    net.summary()
+def visualize_predict(net_path, test_path, start=None, nums=None, mode='img'):
     try:
-        net.load_weights('E:/Data/ShipDetection/FCN/model.h5')
-    except ValueError:
+        net = load_model(net_path, compile=False)
+        net.summary()
+    except (ValueError, OSError):
         print('[Info]Failed to load model.')
-        exit(0)
+        return
 
-    path = 'E:/Data/ShipDetection/FCN/samples'
-    imgs = os.listdir(path)[start: start + n]
+    if mode not in ['img', 'hist']:
+        raise ValueError('`mode` not supported, should be `img` or `hist`.')
+
+    path = test_path
+    imgs = os.listdir(path)
+    if all((start, nums)):
+        end = start + nums
+    else:
+        nums = len(imgs)
+        start, end = 0, nums
+    imgs = imgs[start: end]
     imgs = [cv2.imread(path + '/' + img, cv2.IMREAD_GRAYSCALE) for img in imgs]
     imgs = np.asarray(imgs)
-    imgs = imgs.reshape(imgs.shape + (1,))
+    imgs = imgs.reshape(imgs.shape)
 
-    for i in range(n):
+    rows = int(math.sqrt(nums) / 2) * 2
+    columns = math.ceil(nums * 2. / rows)
+    for i in range(nums):
         x = imgs[i]
-        y = net.predict(x.reshape((1,) + x.shape))
-        plt.subplot(5, n * 0.4, 2 * i + 1).axis('off')
+        plt.subplot(rows, columns, 2 * i + 1, title='Image').axis('off')
         x = x.reshape((768, 768))
+        x = cv2.blur(x, (5, 5))
         plt.imshow(x)
-        plt.subplot(5, n * 0.4, 2 * i + 2).axis('off')
+
+        y = net.predict(x.reshape((1,) + x.shape + (1,)))
         y = y.reshape((768, 768))
-        y = cv2.equalizeHist(np.uint8(y * 255))
-        plt.imshow(y)
-        # plt.hist(y.ravel(), 20)
+
+        if mode is 'img':
+            y = cv2.medianBlur(y, 5)
+            ratio = np.sum(y) / np.sum(np.ones_like(y))
+            if ratio > 0.5:
+                y = 1.0 - y
+            y = get_slices(y)
+            plt.subplot(rows, columns, 2 * i + 2, title='Predict').axis('off')
+            plt.imshow(y)
+        elif mode is 'hist':
+            plt.subplot(rows, columns, 2 * i + 2, title='Histogram')
+            plt.xlim((0, 1))
+            plt.hist(y.ravel(), bins=20, log=True)
     plt.show()
 
 
-def migrate_model(model_path, model_name):
-    model_path = 'E:/Data/ShipDetection/FCN' if model_path is None else model_path
-    model_name = model_path + '/' + model_name
+def get_slices(img: np.ndarray) -> np.ndarray:
+    img = measure.label(img)
+    return img
 
 
 if __name__ == '__main__':
     # validate_loss()
     # visualize_generator()
-    visualize_predict()
+    visualize_predict('E:/Data/ShipDetection/FCN/model.h5',
+                      'E:/Data/ShipDetection/FCN/samples', mode='img')
