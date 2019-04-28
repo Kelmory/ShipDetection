@@ -1,4 +1,6 @@
-from ShipDetection.core import Pipeline
+import os
+import sys
+sys.path.append(os.path.dirname(os.getcwd()))
 
 
 def run_fcn():
@@ -19,9 +21,10 @@ def run_fcn():
                        '_y_shape': (768, 768, 1),
                        '_trainable': (None, None),
                        '_augmentation': False,
+                       '_gpus': 1,
                        }
-    pipe = Pipeline('UNet', 'CsvDirGenerator', fcn_config_dict)
-    pipe.work('train')
+    pipe = Pipeline('DenoiseNet', 'CsvDirGenerator', fcn_config_dict)
+    pipe.work('summary')
 
 
 def run_fcn2():
@@ -63,5 +66,6 @@ def run_cnn():
 
 
 if __name__ == '__main__':
+    from ShipDetection.core import Pipeline
     run_fcn()
     # run_cnn()

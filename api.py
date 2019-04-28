@@ -16,10 +16,9 @@ class SyntheticPipeline:
         self._roi_net = load_model(roi_path, compile=False)
         self._cls_net = load_model(cls_path, compile=False)
 
-
-    def end2end_predict(self, img) -> [(int, int)]:
+    def end2end_predict(self, img: np.ndarray) -> ([(int, int)], np.ndarray):
         return
 
-    def _normalize_img(self, img):
+    def _normalize_img(self, img: np.ndarray) -> np.ndarray:
         return
 

@@ -11,6 +11,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint
 from ShipDetection.data_io import PathHelper
 from ShipDetection.loss import *
 from keras.models import load_model
+from keras.utils import multi_gpu_model
 
 
 class Net:
@@ -27,10 +28,13 @@ class Net:
     _steps = 1
     _divide_k = 10
     _trainable = (None, None)  # (start, end)
+    _gpus = 1
 
     def __init__(self, config):
         self.config_sync(config)
         self._net = self._build()
+        if self._gpus > 1:
+            self._multi_net = multi_gpu_model(self._net, gpus=self._gpus)
         self._set_trainable()
         self._model_exist = PathHelper(self._model_path).is_file_valid()
 
@@ -70,11 +74,15 @@ class Net:
                 print('[Info]Model structure does not match, forming new model.')
 
         valid_steps = int(self._steps / self._divide_k)
-        self._net.fit_generator(generator=kwargs['generator'],
-                                steps_per_epoch=self._steps - valid_steps,
-                                epochs=self._epoch, verbose=1, callbacks=callbacks,
-                                validation_data=kwargs['valid_generator'],
-                                validation_steps=valid_steps)
+        if self._gpus > 1:
+            net = self._multi_net
+        else:
+            net = self._net
+        net.fit_generator(generator=kwargs['generator'],
+                          steps_per_epoch=self._steps - valid_steps,
+                          epochs=self._epoch, verbose=1, callbacks=callbacks,
+                          validation_data=kwargs['valid_generator'],
+                          validation_steps=valid_steps)
 
     def predict(self, **kwargs):
         self.compile()
