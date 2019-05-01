@@ -52,7 +52,7 @@ def validate_loss(show=False):
             break
 
 
-def visualize_predict(net_path, test_path, start=None, nums=None, mode='img'):
+def visualize_predict(net_path, test_path, start=None, nums=None, post_process=False, mode='img'):
     try:
         net = load_model(net_path, compile=False)
         net.summary()
@@ -88,11 +88,11 @@ def visualize_predict(net_path, test_path, start=None, nums=None, mode='img'):
         y = y.reshape((768, 768))
 
         if mode is 'img':
-            y = cv2.medianBlur(y, 5)
-            ratio = np.sum(y) / np.sum(np.ones_like(y))
-            if ratio > 0.5:
-                y = 1.0 - y
-            y = get_slices(y)
+            if post_process:
+                y = cv2.medianBlur(y, 5)
+                ratio = np.sum(y) / np.sum(np.ones_like(y))
+                if ratio > 0.5:
+                    y = 1.0 - y
             plt.subplot(rows, columns, 2 * i + 2, title='Predict').axis('off')
             plt.imshow(y)
         elif mode is 'hist':
@@ -102,13 +102,16 @@ def visualize_predict(net_path, test_path, start=None, nums=None, mode='img'):
     plt.show()
 
 
-def get_slices(img: np.ndarray) -> np.ndarray:
-    img = measure.label(img)
-    return img
+def get_slices(img: np.ndarray) -> list:
+    label = measure.label(img)
+    label = measure.regionprops(label)
+
+    return label
 
 
 if __name__ == '__main__':
     # validate_loss()
     # visualize_generator()
-    visualize_predict('E:/Data/ShipDetection/FCN/model.h5',
-                      'E:/Data/ShipDetection/FCN/samples', mode='img')
+    visualize_predict('E:/Data/ShipDetection/FCN/UNet_any_epoch20.h5',
+                      'E:/Data/ShipDetection/FCN/samples',
+                      mode='img', post_process=True)

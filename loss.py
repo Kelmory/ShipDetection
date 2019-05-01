@@ -11,6 +11,7 @@ def dice_p_bce(in_gt, in_pred):
 
 def focal_loss(gamma=2., alpha=0.25):
     def focal_loss_fixed(y_true, y_pred):
+        y_pred = K.clip(y_pred, K.epsilon(), 1. - K.epsilon())
         pt_1 = tf.where(K.equal(y_true, 1), y_pred, K.ones_like(y_pred))
         pt_0 = tf.where(K.equal(y_true, 0), y_pred, K.zeros_like(y_pred))
         return -K.sum(alpha * K.pow(1. - pt_1, gamma) * K.log(pt_1)) \
@@ -48,3 +49,8 @@ def IoU(y_true, y_pred, eps=1e-6):
     intersection = K.sum(y_true * y_pred)
     union = K.sum(y_true) + K.sum(y_pred) - intersection
     return -K.mean((intersection + eps) / (union + eps))
+
+
+def non_zero_rate(y_true, y_pred):
+    ones = tf.where(y_pred > 0, K.ones_like(y_true), K.zeros_like(y_true))
+    return K.sum(ones) / K.sum(K.ones_like(y_true))

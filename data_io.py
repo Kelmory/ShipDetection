@@ -290,6 +290,6 @@ class CsvDirGenerator(DataGenerator):
             end = start + steps - 1
             for lo, hi in zip(start, end):
                 mask[lo: hi] = 1
-        mask = mask.reshape(self._y_shape).T.reshape(self._y_shape)
+        mask = mask.reshape(self._y_shape[:-1]).T
         return mask
 

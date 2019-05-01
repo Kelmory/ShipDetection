@@ -5,23 +5,6 @@ from ShipDetection.net import *
 class Config:
     config = {}
 
-    def __init__(self):
-        self.config['_epoch'] = 100
-        self.config['_batch_size'] = 8
-        self.config['_lr'] = 1e-4
-        self.config['_model_path'] = ''
-        self.config['_steps'] = 1
-        self.config['_parent_path'] = ''
-        self.config['_load_mode'] = None
-        self.config['_use_mode'] = None
-        self.config['_divide_k'] = 8
-        self.config['_x_shape'] = None
-        self.config['_y_shape'] = None
-        self.config['_neg_path'] = None
-        self.config['_pos_path'] = None
-        self.config['_csv_path'] = None
-        self.config['_dir_path'] = None
-
     def sync_from_dict(self, config_dict):
         if not isinstance(config_dict, dict):
             raise TypeError('`config_dict` should be a dict.')
