@@ -112,6 +112,5 @@ def get_slices(img: np.ndarray) -> list:
 if __name__ == '__main__':
     # validate_loss()
     # visualize_generator()
-    visualize_predict('E:/Data/ShipDetection/FCN/UNet_any_epoch20.h5',
-                      'E:/Data/ShipDetection/FCN/samples',
-                      mode='img', post_process=True)
+    visualize_predict('E:/Data/ShipDetection/FCN/UNet_Any_epoch10.h5',
+                      'E:/Data/ShipDetection/FCN/samples', mode='img', post_process=False)

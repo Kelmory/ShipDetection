@@ -2,6 +2,8 @@ from keras.models import load_model, save_model
 from keras import Model
 from keras.layers import Input, BatchNormalization, GaussianNoise, Conv2D
 from keras.layers import SeparableConv2D, MaxPooling2D, UpSampling2D, Concatenate
+import matplotlib.pyplot as plt
+import cv2
 
 
 def build(shape):
@@ -58,8 +60,21 @@ def build(shape):
 
 if __name__ == '__main__':
     net = build((None, None, 1))
-    origin = build((768, 768, 1))
-    origin.load_weights('E:/Data/ShipDetection/FCN/UNet_768_epoch20.h5', reshape=True)
-    net.set_weights(origin.get_weights())
-    save_model(net, 'E:/Data/ShipDetection/FCN/UNet_Any_epoch20.h5')
+
+    origin = load_model('E:/Data/ShipDetection/FCN/UNet_768_epoch20.h5', compile=False)
+    net.load_weights('E:/Data/ShipDetection/FCN/UNet_768_epoch20.h5', by_name=True)
+
+    x = cv2.imread('E:/Data/ShipDetection/FCN/samples/00e90efc3.jpg', 0)
+    x = x.reshape((1, 768, 768, 1))
+
+    y1 = net.predict(x).reshape((768, 768))
+    y2 = origin.predict(x).reshape((768, 768))
+
+    plt.subplot('121', title='transfer')
+    plt.imshow(y1)
+    plt.subplot('122', title='origin')
+    plt.imshow(y2)
+    plt.show()
+
+    # save_model(net, 'E:/Data/ShipDetection/FCN/UNet_Any_epoch20.h5')
     net.summary(line_length=120)

@@ -181,11 +181,11 @@ class UNet(Net):
 
     def compile(self):
         optimizer = Adam(lr=self._lr)
-        self._net.compile(optimizer=optimizer, loss=[focal_loss(0, 0.9999)],
-                          metrics=['binary_accuracy', true_positive_rate])
+        self._net.compile(optimizer=optimizer, loss=[focal_loss()],
+                          metrics=[non_zero_rate, true_positive_rate])
         if self._gpus > 1:
-            self._multi_net.compile(optimizer=optimizer, loss=[focal_loss(0, 0.9999)],
-                          metrics=['binary_accuracy', true_positive_rate])
+            self._multi_net.compile(optimizer=optimizer, loss=[focal_loss()],
+                                    metrics=['binary_accuracy', true_positive_rate])
 
 
 class ConvNN(Net):
@@ -284,7 +284,7 @@ class DenoiseNet(Net):
         return Model(inputs=[net_in], outputs=[net_out])
 
     def compile(self):
-        optimizer = Adam(self._lr, decay=1e-7)
+        optimizer = SGD(self._lr, decay=1e-7)
         self._net.compile(optimizer, loss=[focal_loss()],
                           metrics=[true_negative_rate, true_positive_rate])
 

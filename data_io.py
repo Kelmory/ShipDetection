@@ -252,7 +252,6 @@ class CsvDirGenerator(DataGenerator):
                 raise KeyError('Wrong generate mode, `disk` or `memory` expected, but %s found' % self._load_mode)
             x = normalize(x, resize=self._x_shape)
             y = normalize(y, resize=self._y_shape)
-            x = x / 255.0
             if self._augmentation:
                 x = np.concatenate((x, x * np.random.random() * 1.5), axis=0)
                 y = np.concatenate((y, y.copy()), axis=0)

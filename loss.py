@@ -14,8 +14,8 @@ def focal_loss(gamma=2., alpha=0.25):
         y_pred = K.clip(y_pred, K.epsilon(), 1. - K.epsilon())
         pt_1 = tf.where(K.equal(y_true, 1), y_pred, K.ones_like(y_pred))
         pt_0 = tf.where(K.equal(y_true, 0), y_pred, K.zeros_like(y_pred))
-        return -K.sum(alpha * K.pow(1. - pt_1, gamma) * K.log(pt_1)) \
-               - K.sum((1 - alpha) * K.pow(pt_0, gamma) * K.log(1. - pt_0))
+        return K.sum(alpha * K.pow(1. - pt_1, gamma) * K.log(pt_1)) \
+               + K.sum((1 - alpha) * K.pow(pt_0, gamma) * K.log(1. - pt_0))
     return focal_loss_fixed
 
 
@@ -30,9 +30,7 @@ def dice_coef_loss(y_true, y_pred):
 
 # Metrics
 def true_positive_rate(y_true, y_pred):
-    if np.max(y_true) == 0.0:
-        return true_negative_rate(1 - y_true, 1 - y_pred)
-    return (K.sum(K.flatten(y_pred) * K.flatten(y_true)) + 1e-3) / (K.sum(K.flatten(y_true)) + 1e-3)
+    return (K.sum(K.flatten(y_pred) * K.flatten(y_true))) / (K.sum(K.flatten(y_true)) + 1e-9)
 
 
 def true_negative_rate(y_true, y_pred):

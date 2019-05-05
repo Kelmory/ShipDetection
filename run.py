@@ -4,15 +4,15 @@ sys.path.append(os.path.dirname(os.getcwd()))
 
 
 def run_fcn():
-    fcn_config_dict = {'_epoch': 100,
+    fcn_config_dict = {'_epoch': 10,
                        '_batch_size': 1,
-                       '_steps': 2000,
+                       '_steps': 100,
                        '_dropna': True,
-                       '_load_model': True,
+                       '_load_model': False,
                        '_lr': 1e-2,
                        '_model_path': 'E:/Data/ShipDetection/FCN/UNet_Any_epoch10.h5',
                        '_parent_path': 'E:/Data/ShipDetection/FCN',
-                       '_csv_path': 'train2.csv',
+                       '_cs v_path': 'train2.csv',
                        '_dir_path': 'train',
                        '_load_mode': 'disk',
                        '_use_mode': 'train',
