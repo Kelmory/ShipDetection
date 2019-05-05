@@ -233,7 +233,7 @@ class DenoiseNet(Net):
 
     def _build(self):
         def down_sample_block(input_, filters=32, kernel_size=3):
-            input_ = BatchNormalization()(input_)
+            # input_ = BatchNormalization()(input_)
 
             conv1 = SeparableConv2D(filters, kernel_size, padding='same', kernel_initializer='Ones')(input_)
             conv1 = LeakyReLU()(conv1)
@@ -264,12 +264,15 @@ class DenoiseNet(Net):
         db2 = down_sample_block(db1)
         db3 = down_sample_block(db2)
         db4 = down_sample_block(db3, 64)
-        db5 = down_sample_block(db4, 128)
+        db5 = down_sample_block(db4, 64)
         db6 = down_sample_block(db5, 128)
+        db7 = down_sample_block(db6, 128)
 
-        ub6 = up_sample_block(db6, 128)
+        ub7 = up_sample_block(db7, 128)
+        concat = Concatenate()([ub7, db6])
+        ub6 = up_sample_block(concat, 128)
         concat = Concatenate()([ub6, db5])
-        ub5 = up_sample_block(concat, 128)
+        ub5 = up_sample_block(concat, 64)
         concat = Concatenate()([ub5, db4])
         ub4 = up_sample_block(concat, 64)
         concat = Concatenate()([ub4, db3])
@@ -285,8 +288,11 @@ class DenoiseNet(Net):
 
     def compile(self):
         optimizer = SGD(self._lr, decay=1e-7)
-        self._net.compile(optimizer, loss=[focal_loss()],
-                          metrics=[true_negative_rate, true_positive_rate])
+        self._net.compile(optimizer, loss=[focal_loss(alpha=0.9, gamma=0.5)],
+                          metrics=[true_negative_rate, non_zero_rate, true_positive_rate])
+        if self._gpus > 1:
+            self._multi_net.compile(optimizer=optimizer, loss=[focal_loss(alpha=0.9, gamma=0.5)],
+                                    metrics=['binary_accuracy', non_zero_rate, true_positive_rate])
 
 
 class TransferUNet(Net):

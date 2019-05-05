@@ -4,26 +4,26 @@ sys.path.append(os.path.dirname(os.getcwd()))
 
 
 def run_fcn():
-    fcn_config_dict = {'_epoch': 10,
-                       '_batch_size': 1,
-                       '_steps': 100,
-                       '_dropna': True,
+    fcn_config_dict = {'_epoch': 100,
+                       '_batch_size': 16,
+                       '_steps': 10000,
+                       '_dropna': False,
                        '_load_model': False,
                        '_lr': 1e-2,
-                       '_model_path': 'E:/Data/ShipDetection/FCN/UNet_Any_epoch10.h5',
+                       '_model_path': 'E:/Data/ShipDetection/FCN/UNet_384.h5',
                        '_parent_path': 'E:/Data/ShipDetection/FCN',
                        '_cs v_path': 'train2.csv',
                        '_dir_path': 'train',
                        '_load_mode': 'disk',
                        '_use_mode': 'train',
                        '_divide_k': 5,
-                       '_x_shape': (None, None, 1),
-                       '_y_shape': (768, 768, 1),
+                       '_x_shape': (384, 384, 1),
+                       '_y_shape': (384, 384, 1),
                        '_trainable': (None, None),
                        '_augmentation': False,
-                       '_gpus': 1,
+                       '_gpus': 2,
                        }
-    pipe = Pipeline('UNet', 'CsvDirGenerator', fcn_config_dict)
+    pipe = Pipeline('DenoiseNet', 'CsvDirGenerator', fcn_config_dict)
     pipe.work('train')
 
 
