@@ -55,6 +55,8 @@ def validate_loss(show=False):
 def visualize_predict(net_path, test_path, start=None, nums=None, post_process=False, mode='img'):
     try:
         net = load_model(net_path, compile=False)
+        shape = net.input_shape[1:]
+        imread_param = cv2.IMREAD_GRAYSCALE if shape[-1] == 1 else cv2.IMREAD_COLOR
         net.summary()
     except (ValueError, OSError):
         print('[Info]Failed to load model.')
@@ -71,21 +73,24 @@ def visualize_predict(net_path, test_path, start=None, nums=None, post_process=F
         nums = len(imgs)
         start, end = 0, nums
     imgs = imgs[start: end]
-    imgs = [cv2.imread(path + '/' + img, cv2.IMREAD_GRAYSCALE) for img in imgs]
+    imgs = [cv2.imread(path + '/' + img, imread_param) for img in imgs]
     imgs = np.asarray(imgs)
     imgs = imgs.reshape(imgs.shape)
 
     rows = int(math.sqrt(nums) / 2) * 2
     columns = math.ceil(nums * 2. / rows)
+
     for i in range(nums):
         x = imgs[i]
         plt.subplot(rows, columns, 2 * i + 1, title='Image').axis('off')
         x = x.reshape((768, 768))
         x = cv2.blur(x, (5, 5))
+        x = cv2.resize(x, shape[:-1])
         plt.imshow(x)
 
         y = net.predict(x.reshape((1,) + x.shape + (1,)))
-        y = y.reshape((768, 768))
+        y = y.reshape(shape[:-1])
+        y = (y * 255).astype(np.uint8)
 
         if mode is 'img':
             if post_process:
@@ -109,8 +114,41 @@ def get_slices(img: np.ndarray) -> list:
     return label
 
 
+def validate_cnn(net_path, dir_path, ):
+    try:
+        net = load_model(net_path, compile=False)
+        shape = net.input_shape[1:]
+        imread_param = cv2.IMREAD_GRAYSCALE if shape[-1] == 1 else cv2.IMREAD_COLOR
+        net.summary(line_length=120)
+    except (ValueError, OSError):
+        print('[Info]Failed to load model.')
+        return
+
+    imgs = os.listdir(dir_path)
+    nums = len(imgs)
+
+    rows = int(math.sqrt(nums) / 2) * 2
+    columns = math.ceil(nums / rows)
+
+    for i, img in enumerate(imgs):
+        label = '_' in img
+        img = cv2.imread(dir_path + '/' + img, imread_param)
+        x = img.reshape((1,) + img.shape + (1, ))
+        y = net.predict(x)
+        plt.subplot(rows, columns, i + 1, title='t: %s p: %.4f' % (label, y)).axis('off')
+        plt.imshow(img)
+    plt.savefig(dir_path + '/' + 'result.eps')
+    plt.show()
+
+
 if __name__ == '__main__':
     # validate_loss()
     # visualize_generator()
-    visualize_predict('E:/Data/ShipDetection/FCN/UNet_Any_epoch10.h5',
-                      'E:/Data/ShipDetection/FCN/samples', mode='img', post_process=False)
+    option = True
+    if option:
+        visualize_predict('E:/Data/ShipDetection/FCN/model.h5',
+                          'E:/Data/ShipDetection/FCN/large',
+                          start=1, nums=32, mode='img', post_process=False)
+    else:
+        validate_cnn('E:/Data/ShipDetection/CNN/model2.h5',
+                     'E:/Data/ShipDetection/CNN/samples')

@@ -191,6 +191,8 @@ class CsvDirGenerator(DataGenerator):
     _csv_path = "train2.csv"
     _dir_path = "train"
 
+    _bf_ratio = 2
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -214,13 +216,16 @@ class CsvDirGenerator(DataGenerator):
         if self._dropna:
             refer = refer.dropna()
         else:
-            na_set = refer.loc[refer['EncodedPixels'].isna()].sample(frac=1).reset_index(drop=True)[:int(self._steps / 2)]
-            pos_set = refer.dropna().sample(frac=1).reset_index(drop=True)[:self._steps - int(self._steps / 2)]
+            na_set = refer.loc[refer['EncodedPixels'].isna()].sample(frac=1).reset_index(drop=True)[:int(self._steps / self._bf_ratio)]
+            pos_set = refer.dropna().sample(frac=1).reset_index(drop=True)[:self._steps - int(self._steps / self._bf_ratio)]
             refer = na_set.append(pos_set)
         self._refer = refer.sample(frac=1).reset_index(drop=True)[:self._steps]
 
+        imread_param = cv2.IMREAD_GRAYSCALE if self._x_shape[-1] is 1 else cv2.IMREAD_COLOR
+
         if self._load_mode is 'memory':
-            self._refer['x'] = self._refer['ImageId'].apply(lambda img_name: cv2.imread(self._dir_path + '/' + img_name))
+            self._refer['x'] = self._refer['ImageId'].apply(
+                lambda img_name: cv2.imread(self._dir_path + '/' + img_name), imread_param)
             self._refer['y'] = self._refer['EncodedPixels'].apply(lambda pixels: self.__mask_decode(pixels))
         elif self._load_mode is 'disk':
             self._refer['x'] = self._refer['ImageId'].apply(lambda img_name: self._dir_path + '/' + img_name)
@@ -235,6 +240,8 @@ class CsvDirGenerator(DataGenerator):
 
         x_, y_ = self.divide(valid)
 
+        imread_param = cv2.IMREAD_GRAYSCALE if self._x_shape[-1] is 1 else cv2.IMREAD_COLOR
+
         if not self._divided:
             raise Exception('Data not divided, use `divide` method.')
 
@@ -242,7 +249,7 @@ class CsvDirGenerator(DataGenerator):
         while True:
             if self._load_mode is 'disk':
                 x = x_[int(i * self._batch_size): int((i + 1) * self._batch_size)].apply(
-                    lambda img: cv2.imread(img, cv2.IMREAD_GRAYSCALE))
+                    lambda img: cv2.imread(img, imread_param))
                 y = y_[int(i * self._batch_size): int((i + 1) * self._batch_size)].apply(
                     lambda label: self.__mask_decode(label))
             elif self._load_mode is 'memory':
@@ -256,11 +263,6 @@ class CsvDirGenerator(DataGenerator):
                 x = np.concatenate((x, x * np.random.random() * 1.5), axis=0)
                 y = np.concatenate((y, y.copy()), axis=0)
             i = (i + 1) % math.ceil(len(x_) / self._batch_size)
-            if i == 0:
-                refer = pd.DataFrame()
-                refer['x'], refer['y'] = x_, y_
-                refer = refer.sample(frac=1).reset_index(drop=True)
-                x_, y_ = refer['x'], refer['y']
             yield x, y
 
     def divide(self, valid=False):
@@ -282,13 +284,13 @@ class CsvDirGenerator(DataGenerator):
         return x_, y_
 
     def __mask_decode(self, element):
-        mask = np.zeros(self._y_shape, dtype=np.uint8).flatten()
+        mask = np.zeros((768, 768), dtype=np.uint8).flatten()
         if isinstance(element, str):
             element = element.split(' ')
             start, steps = np.asarray(element[0::2], dtype=np.int32), np.asarray(element[1::2], dtype=np.int32)
             end = start + steps - 1
             for lo, hi in zip(start, end):
                 mask[lo: hi] = 1
-        mask = mask.reshape(self._y_shape[:-1]).T
+        mask = np.transpose(mask.reshape((768, 768)), axes=[1, 0])
         return mask
 

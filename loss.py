@@ -14,8 +14,8 @@ def focal_loss(gamma=2., alpha=0.25):
         y_pred = K.clip(y_pred, K.epsilon(), 1. - K.epsilon())
         pt_1 = tf.where(K.equal(y_true, 1), y_pred, K.ones_like(y_pred))
         pt_0 = tf.where(K.equal(y_true, 0), y_pred, K.zeros_like(y_pred))
-        return K.sum(alpha * K.pow(1. - pt_1, gamma) * K.log(pt_1)) \
-               + K.sum((1 - alpha) * K.pow(pt_0, gamma) * K.log(1. - pt_0))
+        return -K.sum(alpha * K.pow(1. - pt_1, gamma) * K.log(pt_1)) \
+               - K.sum((1 - alpha) * K.pow(pt_0, gamma) * K.log(1. - pt_0))
     return focal_loss_fixed
 
 
@@ -28,17 +28,30 @@ def dice_coef_loss(y_true, y_pred):
     return 1 - dice_coef(y_true, y_pred)
 
 
-# Metrics
-def true_positive_rate(y_true, y_pred):
-    return (K.sum(K.flatten(y_pred) * K.flatten(y_true))) / (K.sum(K.flatten(y_true)) + 1e-9)
-
-
-def true_negative_rate(y_true, y_pred):
-    return (K.sum(K.flatten(1 - y_pred) * K.flatten(1 - y_true))) / (K.sum(K.flatten(1 - y_true)) + 1e-3)
+def false_positive_rate(y_true, y_pred):
+    return K.sum(y_pred * (1. - y_true)) / K.sum(K.clip(1. - y_true, K.epsilon(), 1.0))
 
 
 def false_negative_rate(y_true, y_pred):
-    return 1 - true_positive_rate(y_true, y_pred)
+    return K.sum(y_true * (1. - y_pred)) / K.sum(K.clip(y_true, K.epsilon(), 1.0))
+
+
+def balanced_metric_rate(alpha=0.5, beta=0.5):
+    def false_rate(y_true, y_pred):
+        return beta * false_positive_rate(y_true, y_pred) + (1. - beta) * false_negative_rate(y_true, y_pred)
+
+    def balanced_rate(y_true, y_pred):
+        return alpha * false_rate(y_true, y_pred) - (1. - alpha) * true_positive_rate(y_true, y_pred)
+    return balanced_rate
+
+
+# Metrics
+def true_positive_rate(y_true, y_pred):
+    return -(K.sum(K.flatten(y_pred) * K.flatten(y_true))) / (K.sum(K.flatten(y_true) + K.flatten(y_pred)) + 1e-9)
+
+
+def true_negative_rate(y_true, y_pred):
+    return (K.sum(K.flatten(1 - y_pred) * K.flatten(1 - y_true))) / (K.sum(K.flatten(1 - y_true) + K.flatten(1 - y_pred)) + 1e-9)
 
 
 def IoU(y_true, y_pred, eps=1e-6):
@@ -50,5 +63,8 @@ def IoU(y_true, y_pred, eps=1e-6):
 
 
 def non_zero_rate(y_true, y_pred):
-    ones = tf.where(y_pred > 0, K.ones_like(y_true), K.zeros_like(y_true))
-    return K.sum(ones) / K.sum(K.ones_like(y_true))
+    return K.sum(y_pred)/ K.sum(K.ones_like(y_pred))
+
+
+def true_non_zero_rate(y_true, y_pred):
+    return K.sum(y_true) / K.sum(K.ones_like(y_true))
